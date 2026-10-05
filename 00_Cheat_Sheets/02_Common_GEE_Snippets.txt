@@ -1,0 +1,35 @@
+// Study area
+var studyArea = geometry;
+
+// Sentinel-2
+var s2 = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
+  .filterBounds(studyArea)
+  .filterDate('2025-01-01', '2026-01-01')
+  .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 40));
+
+// Median composite
+var composite = s2.median().clip(studyArea);
+
+// NDVI
+var ndvi = composite.normalizedDifference(['B8', 'B4'])
+  .rename('NDVI');
+
+// NDWI
+var ndwi = composite.normalizedDifference(['B3', 'B8'])
+  .rename('NDWI');
+
+// MNDWI
+var mndwi = composite.normalizedDifference(['B3', 'B11'])
+  .rename('MNDWI');
+
+// Add layer
+Map.addLayer(ndvi, {min: -1, max: 1}, 'NDVI');
+
+// Export
+Export.image.toDrive({
+  image: ndvi,
+  description: 'NDVI_Export',
+  region: studyArea,
+  scale: 10,
+  maxPixels: 1e13
+});

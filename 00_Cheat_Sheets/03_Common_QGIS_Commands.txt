@@ -1,0 +1,23 @@
+Clip:
+Processing → Vector overlay → Clip
+
+Buffer:
+Processing → Buffer
+
+Dissolve:
+Processing → Dissolve
+
+Intersection:
+Processing → Intersection
+
+Raster Calculator:
+Raster → Raster Calculator
+
+Zonal Statistics:
+Processing → Zonal Statistics
+
+Raster → Vector:
+Raster → Conversion → Polygonize
+
+Vector → Raster:
+Raster → Conversion → Rasterize
