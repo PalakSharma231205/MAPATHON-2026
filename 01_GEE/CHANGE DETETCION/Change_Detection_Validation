@@ -1,0 +1,181 @@
+// ============================================================
+// 14_Change_Detection_Validation.js
+// MAPATHON - CHANGE DETECTION VALIDATION
+//
+// Example:
+// Binary change detection:
+//
+// 0 = No Change
+// 1 = Change
+//
+// Replace example validation data with independent
+// reference/change samples.
+// ============================================================
+
+
+// ------------------------------------------------------------
+// 1. INPUT
+// ------------------------------------------------------------
+
+var validationSamples = ee.FeatureCollection(
+  'users/YOUR_USERNAME/change_validation'
+);
+
+
+// ------------------------------------------------------------
+// 2. PROPERTY NAMES
+// ------------------------------------------------------------
+
+// Actual/reference change class
+var referenceProperty = 'reference';
+
+// Model-predicted change class
+var predictionProperty = 'prediction';
+
+
+// ------------------------------------------------------------
+// 3. CONFUSION MATRIX
+// ------------------------------------------------------------
+
+var confusionMatrix = validationSamples.errorMatrix(
+  referenceProperty,
+  predictionProperty
+);
+
+print('Change Detection Confusion Matrix:', confusionMatrix);
+
+
+// ------------------------------------------------------------
+// 4. OVERALL ACCURACY
+// ------------------------------------------------------------
+
+var accuracy = confusionMatrix.accuracy();
+
+print('Overall Accuracy:', accuracy);
+
+
+// ------------------------------------------------------------
+// 5. KAPPA
+// ------------------------------------------------------------
+
+var kappa = confusionMatrix.kappa();
+
+print('Kappa:', kappa);
+
+
+// ------------------------------------------------------------
+// 6. PRODUCER'S ACCURACY
+// ------------------------------------------------------------
+
+var producersAccuracy =
+  confusionMatrix.producersAccuracy();
+
+print(
+  'Producer Accuracy:',
+  producersAccuracy
+);
+
+
+// ------------------------------------------------------------
+// 7. USER'S / CONSUMER'S ACCURACY
+// ------------------------------------------------------------
+
+var consumersAccuracy =
+  confusionMatrix.consumersAccuracy();
+
+print(
+  'User / Consumer Accuracy:',
+  consumersAccuracy
+);
+
+
+// ------------------------------------------------------------
+// 8. SAMPLE COUNT
+// ------------------------------------------------------------
+
+print(
+  'Validation sample count:',
+  validationSamples.size()
+);
+
+
+// ------------------------------------------------------------
+// 9. CHANGE AREA
+// ------------------------------------------------------------
+
+// Example change raster.
+// Replace with your actual change image.
+var changeImage = ee.Image('YOUR_CHANGE_IMAGE');
+
+
+// Example:
+// change = 1
+// no change = 0
+
+var changeMask = changeImage.eq(1);
+
+
+// Pixel area in square metres
+var pixelArea = ee.Image.pixelArea();
+
+
+// Total change area
+
+var changeArea = pixelArea
+  .updateMask(changeMask)
+  .reduceRegion({
+    reducer: ee.Reducer.sum(),
+    geometry: changeImage.geometry(),
+    scale: 10,
+    maxPixels: 1e13
+  });
+
+
+// Convert square metres to square kilometres
+
+var changeAreaKm2 = ee.Number(
+  changeArea.get('area')
+).divide(1e6);
+
+print(
+  'Total Change Area (km²):',
+  changeAreaKm2
+);
+
+
+// ------------------------------------------------------------
+// 10. INTERPRETATION
+// ------------------------------------------------------------
+
+print('================ CHANGE DETECTION INTERPRETATION ================');
+
+print(
+  'Overall Accuracy: Percentage of validation samples correctly classified.'
+);
+
+print(
+  'Kappa: Agreement between predicted and reference change beyond chance.'
+);
+
+print(
+  'Producer Accuracy: How well actual change/no-change areas are detected.'
+);
+
+print(
+  'User Accuracy: Reliability of predicted change/no-change areas.'
+);
+
+print(
+  'Change Area: Total spatial extent identified as changed.'
+);
+
+
+// ------------------------------------------------------------
+// 11. EXPORT VALIDATION DATA
+// ------------------------------------------------------------
+
+Export.table.toDrive({
+  collection: validationSamples,
+  description: 'Change_Detection_Validation',
+  fileFormat: 'CSV'
+});

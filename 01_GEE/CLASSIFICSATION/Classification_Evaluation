@@ -1,0 +1,266 @@
+// ============================================================
+// 12_Classification_Evaluation.js
+// MAPATHON CLASSIFICATION MODEL EVALUATION
+// ============================================================
+//
+// PURPOSE:
+// Evaluate a trained classification model using
+// INDEPENDENT validation/reference samples.
+//
+// OUTPUTS:
+// 1. Confusion Matrix
+// 2. Overall Accuracy
+// 3. Kappa
+// 4. Producer's Accuracy (Recall)
+// 5. User's Accuracy
+// 6. Precision
+// 7. Recall
+// 8. F1 Score
+// 9. Class-wise statistics
+//
+// IMPORTANT:
+// Do NOT use the training samples as independent validation data.
+//
+// ============================================================
+
+
+// ============================================================
+// 1. USER INPUTS
+// ============================================================
+
+// Replace this with your independent validation samples.
+//
+// The validation FeatureCollection must contain:
+// - geometry
+// - the TRUE class label
+//
+// Example property name:
+// 'class'
+
+var validationSamples = ee.FeatureCollection(
+  'YOUR_VALIDATION_ASSET'
+);
+
+
+// Name of the property containing the TRUE class.
+var classProperty = 'class';
+
+
+// ============================================================
+// 2. INPUT CLASSIFIER
+// ============================================================
+
+// This should be the classifier trained in your
+// Random Forest / Gradient Tree Boost workflow.
+//
+// Example:
+//
+// var classifier = ee.Classifier.smileRandomForest({
+//   numberOfTrees: 100
+// }).train({
+//   features: trainingData,
+//   classProperty: 'class',
+//   inputProperties: featureBands
+// });
+
+
+// IMPORTANT:
+// Replace this line with your trained classifier.
+
+var classifier = trainedClassifier;
+
+
+// ============================================================
+// 3. VALIDATE THE MODEL
+// ============================================================
+
+// Classify the independent validation samples.
+
+var validated = validationSamples.classify(classifier);
+
+
+// ============================================================
+// 4. CONFUSION MATRIX
+// ============================================================
+
+// 'class' = TRUE/reference class
+// 'classification' = MODEL prediction
+
+var confusionMatrix = validated.errorMatrix(
+  classProperty,
+  'classification'
+);
+
+
+print('========================================');
+print('CONFUSION MATRIX');
+print('========================================');
+
+print(confusionMatrix);
+
+
+// ============================================================
+// 5. OVERALL ACCURACY
+// ============================================================
+
+var overallAccuracy = confusionMatrix.accuracy();
+
+print('========================================');
+print('OVERALL ACCURACY');
+print('========================================');
+
+print(overallAccuracy);
+
+
+// ============================================================
+// 6. KAPPA
+// ============================================================
+
+var kappa = confusionMatrix.kappa();
+
+print('========================================');
+print('KAPPA');
+print('========================================');
+
+print(kappa);
+
+
+// ============================================================
+// 7. PRODUCER'S ACCURACY
+// ============================================================
+//
+// Producer's Accuracy answers:
+//
+// "Of the actual samples belonging to a class,
+// how many did the model correctly identify?"
+//
+// This is essentially class-wise RECALL.
+//
+
+var producersAccuracy = confusionMatrix.producersAccuracy();
+
+print('========================================');
+print("PRODUCER'S ACCURACY / RECALL");
+print('========================================');
+
+print(producersAccuracy);
+
+
+// ============================================================
+// 8. USER'S ACCURACY
+// ============================================================
+//
+// User's Accuracy answers:
+//
+// "Of the samples predicted as a particular class,
+// how many were actually that class?"
+//
+// This corresponds to class-wise PRECISION.
+//
+
+var usersAccuracy = confusionMatrix.consumersAccuracy();
+
+print('========================================');
+print("USER'S ACCURACY / PRECISION");
+print('========================================');
+
+print(usersAccuracy);
+
+
+// ============================================================
+// 9. F1 SCORE
+// ============================================================
+//
+// F1 = harmonic mean of Precision and Recall.
+//
+// F1 = 2 * Precision * Recall / (Precision + Recall)
+//
+
+var precision = ee.Array(usersAccuracy);
+var recall = ee.Array(producersAccuracy);
+
+var f1 = precision.multiply(recall)
+  .multiply(2)
+  .divide(precision.add(recall));
+
+
+print('========================================');
+print('CLASS-WISE F1 SCORE');
+print('========================================');
+
+print(f1);
+
+
+// ============================================================
+// 10. VALIDATION SAMPLE COUNT
+// ============================================================
+
+print('========================================');
+print('VALIDATION SAMPLE COUNT');
+print('========================================');
+
+print('Total validation samples:', validationSamples.size());
+
+
+// ============================================================
+// 11. CLASS DISTRIBUTION
+// ============================================================
+
+var classHistogram = validationSamples.aggregate_histogram(
+  classProperty
+);
+
+print('========================================');
+print('VALIDATION CLASS DISTRIBUTION');
+print('========================================');
+
+print(classHistogram);
+
+
+// ============================================================
+// 12. INTERPRETATION GUIDE
+// ============================================================
+
+print('========================================');
+print('INTERPRETATION GUIDE');
+print('========================================');
+
+print(
+  'Overall Accuracy: Overall percentage of correctly classified validation samples.'
+);
+
+print(
+  'Kappa: Agreement between reference and prediction beyond chance.'
+);
+
+print(
+  "Producer's Accuracy / Recall: Ability to correctly identify actual samples of each class."
+);
+
+print(
+  "User's Accuracy / Precision: Reliability of each predicted class."
+);
+
+print(
+  'F1 Score: Balance between precision and recall for each class.'
+);
+
+
+// ============================================================
+// 13. OPTIONAL: EXPORT VALIDATED SAMPLES
+// ============================================================
+//
+// Useful if you want to inspect the validation
+// results later in QGIS or Python.
+//
+
+Export.table.toDrive({
+  collection: validated,
+  description: 'Mapathon_Validation_Results',
+  fileFormat: 'CSV'
+});
+
+
+// ============================================================
+// END
+// ============================================================

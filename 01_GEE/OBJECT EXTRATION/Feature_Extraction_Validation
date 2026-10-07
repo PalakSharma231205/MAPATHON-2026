@@ -1,0 +1,160 @@
+// ============================================================
+// 16_Feature_Extraction_Validation.js
+// MAPATHON - FEATURE / OBJECT EXTRACTION VALIDATION
+//
+// Example:
+// Water-body extraction
+//
+// Useful for:
+// Water
+// Vegetation
+// Built-up
+// Burned area
+// Other extracted features
+// ============================================================
+
+
+// ------------------------------------------------------------
+// 1. EXTRACTED FEATURE
+// ------------------------------------------------------------
+
+// Replace with your extracted feature layer.
+
+var extractedFeatures = ee.FeatureCollection(
+  'users/YOUR_USERNAME/extracted_features'
+);
+
+
+// ------------------------------------------------------------
+// 2. BASIC OBJECT COUNT
+// ------------------------------------------------------------
+
+var objectCount = extractedFeatures.size();
+
+print(
+  'Number of extracted objects:',
+  objectCount
+);
+
+
+// ------------------------------------------------------------
+// 3. TOTAL AREA
+// ------------------------------------------------------------
+
+// IMPORTANT:
+// Your vector layer should contain an area property.
+// Example property name = area_m2
+
+var totalArea = extractedFeatures
+  .aggregate_sum('area_m2');
+
+print(
+  'Total extracted area (m²):',
+  totalArea
+);
+
+
+// Convert to km²
+
+var totalAreaKm2 = ee.Number(totalArea)
+  .divide(1e6);
+
+print(
+  'Total extracted area (km²):',
+  totalAreaKm2
+);
+
+
+// ------------------------------------------------------------
+// 4. AVERAGE OBJECT AREA
+// ------------------------------------------------------------
+
+var averageArea = extractedFeatures
+  .aggregate_mean('area_m2');
+
+print(
+  'Average object area (m²):',
+  averageArea
+);
+
+
+// ------------------------------------------------------------
+// 5. LARGEST OBJECT
+// ------------------------------------------------------------
+
+var largestObject = extractedFeatures
+  .aggregate_max('area_m2');
+
+print(
+  'Largest object area (m²):',
+  largestObject
+);
+
+
+// ------------------------------------------------------------
+// 6. REFERENCE DATA
+// ------------------------------------------------------------
+
+// Optional independent reference objects.
+
+var referenceFeatures = ee.FeatureCollection(
+  'users/YOUR_USERNAME/reference_features'
+);
+
+
+// ------------------------------------------------------------
+// 7. INTERSECTION WITH REFERENCE
+// ------------------------------------------------------------
+
+// This section should be adapted depending on
+// the geometry and reference data available.
+
+var referenceCount =
+  referenceFeatures.size();
+
+print(
+  'Reference feature count:',
+  referenceCount
+);
+
+
+// ------------------------------------------------------------
+// 8. INTERPRETATION
+// ------------------------------------------------------------
+
+print('================ FEATURE EXTRACTION INTERPRETATION ================');
+
+print(
+  'Object Count: Number of extracted features.'
+);
+
+print(
+  'Total Area: Total spatial extent of extracted features.'
+);
+
+print(
+  'Average Area: Typical size of extracted objects.'
+);
+
+print(
+  'Largest Object: Largest extracted feature.'
+);
+
+print(
+  'Reference Count: Number of independently identified reference features.'
+);
+
+print(
+  'Use independent reference data for formal accuracy assessment.'
+);
+
+
+// ------------------------------------------------------------
+// 9. EXPORT
+// ------------------------------------------------------------
+
+Export.table.toDrive({
+  collection: extractedFeatures,
+  description: 'Feature_Extraction_Results',
+  fileFormat: 'CSV'
+});

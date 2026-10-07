@@ -1,0 +1,364 @@
+I will give you a Mapathon problem statement.
+
+Act as an expert in GIS, Remote Sensing, Google Earth Engine, AI/ML, and QGIS, with a focus on solving problems efficiently in a 24-hour thematic mapping competition.
+
+PROBLEM STATEMENT:
+[PASTE PROBLEM STATEMENT HERE]
+
+Analyze the problem statement and give me a practical GIS/Mapathon strategy.
+
+IMPORTANT:
+- Do not suggest spatial analysis just for the sake of using more tools.
+- Select only the analyses that are relevant to the problem and can add meaningful evidence or decision value.
+- Prioritize analyses that can realistically be completed within a 24-hour competition.
+- Clearly distinguish between:
+  1. Main analysis
+  2. Supporting analysis
+  3. Optional/bonus analysis
+- Tell me when an analysis is unnecessary.
+- Assume my main workflow is GEE → AI/ML → QGIS.
+- Use QGIS mainly for spatial analysis, supporting evidence, statistics, visualization, and final map preparation.
+- Do not force Python unless it provides a real advantage.
+
+Give the answer in the following structure:
+
+━━━━━━━━━━━━━━━━━━━━
+1. PROBLEM UNDERSTANDING
+━━━━━━━━━━━━━━━━━━━━
+
+Explain:
+- What exactly is the problem asking?
+- What is the target/output?
+- Is it mainly:
+  - Classification
+  - Regression
+  - Change Detection
+  - Risk Mapping
+  - Suitability Mapping
+  - Object/Feature Extraction
+  - or a combination?
+- What should the final thematic map show?
+- What is the main decision/question the map should answer?
+
+━━━━━━━━━━━━━━━━━━━━
+2. RECOMMENDED OVERALL WORKFLOW
+━━━━━━━━━━━━━━━━━━━━
+
+Give the recommended workflow from beginning to end:
+
+PROBLEM
+↓
+DATA
+↓
+GEE PREPROCESSING
+↓
+FEATURE ENGINEERING
+↓
+AI/ML
+↓
+VALIDATION
+↓
+EXPORT
+↓
+QGIS SPATIAL ANALYSIS
+↓
+SUPPORTING MAPS
+↓
+STATISTICS
+↓
+FINAL THEMATIC MAP
+↓
+DECISION / RECOMMENDATION
+
+Modify this workflow if the problem requires a different approach.
+
+━━━━━━━━━━━━━━━━━━━━
+3. SUITABLE SPATIAL ANALYSIS
+━━━━━━━━━━━━━━━━━━━━
+
+List the spatial analyses that are actually suitable for this problem.
+
+For each analysis give:
+
+| Spatial Analysis | Why it is relevant | Input data needed | QGIS tool | Expected output | Priority |
+|---|---|---|---|---|---|
+
+Consider relevant QGIS analyses such as:
+- Raster Calculator
+- Reclassification
+- Classification
+- Buffer
+- Clip
+- Dissolve
+- Intersection
+- Union
+- Difference
+- Spatial Join
+- Zonal Statistics
+- Area Statistics
+- Distance Analysis
+- Proximity Analysis
+- Overlay Analysis
+- Weighted Overlay
+- MCDA
+- Suitability Analysis
+- Risk Analysis
+- Change Analysis
+- Network Analysis
+- Density Analysis
+- Hotspot analysis
+- Terrain analysis
+
+Only include the ones that genuinely fit the problem.
+
+Mark each as:
+⭐⭐⭐ MUST DO
+⭐⭐ GOOD SUPPORTING ANALYSIS
+⭐ OPTIONAL/BONUS
+
+━━━━━━━━━━━━━━━━━━━━
+4. SUPPORTING MAP IDEAS
+━━━━━━━━━━━━━━━━━━━━
+
+Suggest useful supporting maps that can strengthen the final solution.
+
+For every supporting map give:
+
+MAP NAME:
+PURPOSE:
+WHAT IT SHOWS:
+INPUT DATA:
+QGIS ANALYSIS:
+QGIS TOOL(S):
+EXPECTED OUTPUT:
+WHY IT STRENGTHENS THE STORY:
+
+Give approximately 3–6 strong supporting map ideas.
+
+Do NOT suggest maps that are merely decorative.
+
+Think in terms of:
+
+“What is happening?”
+“Why is it happening?”
+“Where is the impact?”
+“Who/what is affected?”
+“Where should action be taken?”
+
+For example, depending on the problem, supporting maps could include:
+- Land-cover map
+- NDVI/vegetation condition map
+- Water proximity map
+- Elevation/slope map
+- Built-up density map
+- Change map
+- Distance/proximity map
+- Exposure map
+- Vulnerability map
+- Suitability factors
+- Risk-factor maps
+- Population/infrastructure exposure
+- Accessibility map
+- Priority/intervention zones
+
+━━━━━━━━━━━━━━━━━━━━
+5. HOW TO DO THE ANALYSIS IN QGIS
+━━━━━━━━━━━━━━━━━━━━
+
+For every recommended spatial analysis, explain the actual QGIS procedure step-by-step.
+
+Use this format:
+
+ANALYSIS: [name]
+
+INPUT:
+- [layer]
+- [layer]
+
+QGIS STEPS:
+1. Open [Processing Toolbox/tool]
+2. Select [input layer]
+3. Set [important parameter]
+4. Run the tool
+5. Check the output
+6. Style the output using [appropriate symbology]
+
+OUTPUT:
+[what the resulting layer represents]
+
+INTERPRETATION:
+[what I should learn from this result]
+
+Also mention important parameters, thresholds, CRS considerations, raster resolution, NoData issues, and whether the analysis should be performed before or after reprojection/clipping.
+
+━━━━━━━━━━━━━━━━━━━━
+6. SUPPORTING STATISTICS / RESULTS
+━━━━━━━━━━━━━━━━━━━━
+
+Tell me what quantitative results I should calculate.
+
+Examples:
+- Area by class
+- Percentage by class
+- Area of change
+- Change percentage
+- Population exposed
+- Infrastructure exposed
+- Area within buffer
+- Mean/maximum/minimum values
+- Zonal statistics
+- Risk-area distribution
+- Suitability-area distribution
+- Accuracy metrics
+- Regression metrics
+- Feature/object counts
+- Distance statistics
+
+For each result explain:
+- What to calculate
+- Which QGIS tool can calculate it
+- Why it matters
+- How it could be presented in the PPT
+
+━━━━━━━━━━━━━━━━━━━━
+7. FINAL MAP + SUPPORTING MAP STORY
+━━━━━━━━━━━━━━━━━━━━
+
+Design the map story.
+
+Tell me:
+
+MAIN THEMATIC MAP:
+[what should be the main map?]
+
+SUPPORTING MAP 1:
+[map + purpose]
+
+SUPPORTING MAP 2:
+[map + purpose]
+
+SUPPORTING MAP 3:
+[map + purpose]
+
+OPTIONAL MAP:
+[map + purpose]
+
+Then explain how these maps collectively tell a story:
+
+WHAT IS HAPPENING?
+→ WHY?
+→ WHERE IS THE IMPACT?
+→ WHERE SHOULD WE ACT?
+
+━━━━━━━━━━━━━━━━━━━━
+8. DECISION / IMPACT ANALYSIS
+━━━━━━━━━━━━━━━━━━━━
+
+Tell me how to convert the spatial results into an actionable recommendation.
+
+Give:
+
+WHO:
+[who can use the result]
+
+WHERE:
+[priority locations]
+
+WHAT:
+[problem identified]
+
+ACTION:
+[recommended action]
+
+IMPACT:
+[expected benefit]
+
+Also tell me if a priority/intervention map can be created using QGIS.
+
+If yes, explain exactly how.
+
+━━━━━━━━━━━━━━━━━━━━
+9. VALIDATION AND RELIABILITY
+━━━━━━━━━━━━━━━━━━━━
+
+Tell me what should be validated.
+
+Depending on the problem, include relevant:
+- Classification Accuracy
+- Confusion Matrix
+- Precision
+- Recall
+- F1 Score
+- Kappa
+- RMSE
+- MAE
+- R²
+- Independent validation samples
+- Spatial validation
+- Comparison with reference data
+
+Explain how the validation result should support the final map.
+
+Do not use training data as independent proof of accuracy.
+
+━━━━━━━━━━━━━━━━━━━━
+10. WHAT NOT TO DO
+━━━━━━━━━━━━━━━━━━━━
+
+List analyses/tools that may look useful but are unnecessary for this particular problem.
+
+Explain why they should be skipped.
+
+Remember:
+MORE ANALYSIS ≠ BETTER PROJECT.
+
+The goal is:
+RELEVANT ANALYSIS → STRONG EVIDENCE → CLEAR INSIGHT → ACTIONABLE DECISION
+
+━━━━━━━━━━━━━━━━━━━━
+11. 24-HOUR PRIORITY PLAN
+━━━━━━━━━━━━━━━━━━━━
+
+Finally divide everything into:
+
+MUST DO
+- ...
+
+SHOULD DO
+- ...
+
+IF TIME ALLOWS
+- ...
+
+SKIP
+- ...
+
+Give me the most efficient route to a competition-ready result.
+
+━━━━━━━━━━━━━━━━━━━━
+12. FINAL RECOMMENDED QGIS WORKFLOW
+━━━━━━━━━━━━━━━━━━━━
+
+End with a short exact workflow such as:
+
+INPUT LAYERS
+↓
+CLIP / PREPROCESS
+↓
+MAIN SPATIAL ANALYSIS
+↓
+SUPPORTING ANALYSIS 1
+↓
+SUPPORTING ANALYSIS 2
+↓
+STATISTICS
+↓
+VALIDATION
+↓
+FINAL THEMATIC MAP
+↓
+DECISION / PRIORITY MAP
+↓
+PPT + REPORT
+
+Make the recommendations specific to the given problem statement rather than giving generic GIS advice.

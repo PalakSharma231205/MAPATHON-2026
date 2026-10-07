@@ -1,0 +1,225 @@
+// ============================================================
+// 13_Regression_Evaluation.js
+// MAPATHON - REGRESSION EVALUATION
+//
+// Example:
+// Predicting Land Surface Temperature (LST)
+//
+// IMPORTANT:
+// Replace the example prediction and reference datasets
+// with your actual competition data.
+//
+// Outputs:
+// 1. MAE
+// 2. RMSE
+// 3. R²
+// 4. Mean Error / Bias
+// 5. Correlation
+// 6. Prediction vs Reference chart
+// ============================================================
+
+
+// ------------------------------------------------------------
+// 1. INPUT DATA
+// ------------------------------------------------------------
+
+// Example validation/reference points.
+// Replace with your own independent validation/reference data.
+var validationPoints = ee.FeatureCollection(
+  'users/YOUR_USERNAME/validation_points'
+);
+
+
+// ------------------------------------------------------------
+// 2. PROPERTY NAMES
+// ------------------------------------------------------------
+
+// Property containing the reference/actual value.
+var referenceProperty = 'reference';
+
+// Property containing model prediction.
+var predictionProperty = 'prediction';
+
+
+// ------------------------------------------------------------
+// 3. EXTRACT VALUES
+// ------------------------------------------------------------
+
+var reference = validationPoints.aggregate_array(referenceProperty);
+var prediction = validationPoints.aggregate_array(predictionProperty);
+
+print('Reference values:', reference);
+print('Predicted values:', prediction);
+
+
+// ------------------------------------------------------------
+// 4. ERROR CALCULATION
+// ------------------------------------------------------------
+
+// Calculate error:
+// Prediction - Reference
+
+var errors = validationPoints.map(function(feature) {
+
+  var ref = ee.Number(feature.get(referenceProperty));
+  var pred = ee.Number(feature.get(predictionProperty));
+
+  var error = pred.subtract(ref);
+
+  return feature.set({
+    error: error,
+    absolute_error: error.abs(),
+    squared_error: error.pow(2)
+  });
+
+});
+
+
+// ------------------------------------------------------------
+// 5. MAE
+// ------------------------------------------------------------
+
+var mae = errors
+  .aggregate_mean('absolute_error');
+
+print('MAE:', mae);
+
+
+// ------------------------------------------------------------
+// 6. RMSE
+// ------------------------------------------------------------
+
+var mse = errors
+  .aggregate_mean('squared_error');
+
+var rmse = ee.Number(mse).sqrt();
+
+print('RMSE:', rmse);
+
+
+// ------------------------------------------------------------
+// 7. MEAN ERROR / BIAS
+// ------------------------------------------------------------
+
+var bias = errors
+  .aggregate_mean('error');
+
+print('Mean Error / Bias:', bias);
+
+
+// ------------------------------------------------------------
+// 8. R²
+// ------------------------------------------------------------
+
+// Mean of reference values
+
+var meanReference = ee.Number(
+  validationPoints.aggregate_mean(referenceProperty)
+);
+
+
+// Total Sum of Squares
+var totalSS = validationPoints.map(function(feature) {
+
+  var ref = ee.Number(feature.get(referenceProperty));
+
+  return feature.set(
+    'total_squared_error',
+    ref.subtract(meanReference).pow(2)
+  );
+
+}).aggregate_sum('total_squared_error');
+
+
+// Residual Sum of Squares
+
+var residualSS = errors
+  .aggregate_sum('squared_error');
+
+
+// R²
+
+var rSquared = ee.Number(1).subtract(
+  ee.Number(residualSS).divide(totalSS)
+);
+
+print('R²:', rSquared);
+
+
+// ------------------------------------------------------------
+// 9. CORRELATION
+// ------------------------------------------------------------
+
+var correlation = validationPoints.reduceColumns({
+  reducer: ee.Reducer.pearsonsCorrelation(),
+  selectors: [
+    predictionProperty,
+    referenceProperty
+  ]
+});
+
+print('Pearson Correlation:', correlation);
+
+
+// ------------------------------------------------------------
+// 10. VALIDATION SAMPLE COUNT
+// ------------------------------------------------------------
+
+print(
+  'Number of validation samples:',
+  validationPoints.size()
+);
+
+
+// ------------------------------------------------------------
+// 11. PREDICTION VS REFERENCE CHART
+// ------------------------------------------------------------
+
+var chart = ui.Chart.feature.byFeature(
+  validationPoints,
+  referenceProperty,
+  predictionProperty
+)
+.setChartType('ScatterChart')
+.setOptions({
+  title: 'Predicted vs Reference Values',
+  hAxis: {
+    title: 'Reference Value'
+  },
+  vAxis: {
+    title: 'Predicted Value'
+  },
+  pointSize: 4,
+  trendlines: {
+    0: {
+      showR2: true,
+      visibleInLegend: true
+    }
+  }
+});
+
+print(chart);
+
+
+// ------------------------------------------------------------
+// 12. INTERPRETATION GUIDE
+// ------------------------------------------------------------
+
+print('================ REGRESSION INTERPRETATION ================');
+
+print('MAE: Lower is better.');
+print('RMSE: Lower is better; strongly affected by large errors.');
+print('R²: Higher is better; indicates explained variation.');
+print('Bias near 0: indicates little systematic over/under prediction.');
+print('Correlation closer to 1: stronger positive agreement.');
+
+
+// ------------------------------------------------------------
+// 13. EXPORT VALIDATION RESULTS
+// ------------------------------------------------------------
+
+Export.table.toDrive({
+  collection: errors,
+  description: 'Regression_Validation_Results',
+  fileFormat: 'CSV'
+});

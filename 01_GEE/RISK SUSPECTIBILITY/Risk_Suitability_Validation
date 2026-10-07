@@ -1,0 +1,197 @@
+// ============================================================
+// 15_Risk_Suitability_Validation.js
+// MAPATHON - RISK / SUITABILITY VALIDATION
+//
+// Example:
+// Flood risk validation using independent observed
+// flood/event points.
+//
+// IMPORTANT:
+// This is an evidence-based validation template.
+// Adapt the reference data to the actual problem.
+// ============================================================
+
+
+// ------------------------------------------------------------
+// 1. RISK MAP
+// ------------------------------------------------------------
+
+// Replace with your actual risk/suitability raster.
+
+var riskMap = ee.Image('YOUR_RISK_MAP');
+
+
+// Example classes:
+//
+// 1 = Low
+// 2 = Moderate
+// 3 = High
+// 4 = Very High
+
+
+// ------------------------------------------------------------
+// 2. REFERENCE EVENT POINTS
+// ------------------------------------------------------------
+
+// Example:
+// Historical flood locations.
+
+var referencePoints = ee.FeatureCollection(
+  'users/YOUR_USERNAME/reference_events'
+);
+
+
+// ------------------------------------------------------------
+// 3. SAMPLE RISK VALUE AT REFERENCE POINTS
+// ------------------------------------------------------------
+
+var sampledPoints = riskMap.sampleRegions({
+  collection: referencePoints,
+  scale: 10,
+  geometries: true
+});
+
+print(
+  'Reference points with predicted risk:',
+  sampledPoints
+);
+
+
+// ------------------------------------------------------------
+// 4. NUMBER OF REFERENCE POINTS
+// ------------------------------------------------------------
+
+print(
+  'Total reference events:',
+  referencePoints.size()
+);
+
+
+// ------------------------------------------------------------
+// 5. COUNT EVENTS IN HIGH / VERY HIGH RISK
+// ------------------------------------------------------------
+
+// Example:
+// Risk >= 3 means High or Very High.
+
+var highRiskEvents = sampledPoints.filter(
+  ee.Filter.gte('classification', 3)
+);
+
+print(
+  'Reference events in High/Very High risk:',
+  highRiskEvents.size()
+);
+
+
+// ------------------------------------------------------------
+// 6. HIT RATE
+// ------------------------------------------------------------
+
+var hitRate = ee.Number(
+  highRiskEvents.size()
+).divide(
+  referencePoints.size()
+);
+
+print(
+  'Hit Rate:',
+  hitRate
+);
+
+
+// ------------------------------------------------------------
+// 7. HIGH-RISK AREA
+// ------------------------------------------------------------
+
+var highRiskMask = riskMap.gte(3);
+
+var areaImage = ee.Image.pixelArea()
+  .updateMask(highRiskMask);
+
+var area = areaImage.reduceRegion({
+  reducer: ee.Reducer.sum(),
+  geometry: riskMap.geometry(),
+  scale: 10,
+  maxPixels: 1e13
+});
+
+var highRiskAreaKm2 = ee.Number(
+  area.get('area')
+).divide(1e6);
+
+print(
+  'High / Very High Risk Area (km²):',
+  highRiskAreaKm2
+);
+
+
+// ------------------------------------------------------------
+// 8. PERCENTAGE OF STUDY AREA
+// ------------------------------------------------------------
+
+var totalAreaImage = ee.Image.pixelArea();
+
+var totalArea = totalAreaImage.reduceRegion({
+  reducer: ee.Reducer.sum(),
+  geometry: riskMap.geometry(),
+  scale: 10,
+  maxPixels: 1e13
+});
+
+var totalAreaKm2 = ee.Number(
+  totalArea.get('area')
+).divide(1e6);
+
+
+var highRiskPercentage =
+  highRiskAreaKm2
+  .divide(totalAreaKm2)
+  .multiply(100);
+
+print(
+  'High / Very High Risk Percentage:',
+  highRiskPercentage
+);
+
+
+// ------------------------------------------------------------
+// 9. INTERPRETATION GUIDE
+// ------------------------------------------------------------
+
+print('================ RISK / SUITABILITY INTERPRETATION ================');
+
+print(
+  'Hit Rate: Percentage of reference events captured by high-risk areas.'
+);
+
+print(
+  'High Risk Area: Spatial extent requiring greater attention.'
+);
+
+print(
+  'Risk Percentage: Proportion of study area classified as high risk.'
+);
+
+print(
+  'Higher Hit Rate generally indicates stronger ability to capture known events.'
+);
+
+print(
+  'However, a high Hit Rate alone does not prove that the risk model is accurate.'
+);
+
+print(
+  'Validation should use independent reference data whenever possible.'
+);
+
+
+// ------------------------------------------------------------
+// 10. EXPORT
+// ------------------------------------------------------------
+
+Export.table.toDrive({
+  collection: sampledPoints,
+  description: 'Risk_Suitability_Validation',
+  fileFormat: 'CSV'
+});
