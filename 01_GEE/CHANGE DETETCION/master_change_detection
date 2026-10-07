@@ -1,0 +1,288 @@
+// ============================================================
+// CHANGE DETECTION TEMPLATE — SENTINEL-2
+// MAPATHON PREPARATION
+// ============================================================
+
+
+// ============================================================
+// 1. STUDY AREA
+// ============================================================
+
+// Replace this with your study area
+var studyArea = /* YOUR STUDY AREA */;
+
+Map.centerObject(studyArea, 10);
+Map.addLayer(studyArea, {}, 'Study Area');
+
+
+// ============================================================
+// 2. DATE SETTINGS
+// ============================================================
+
+// Earlier period
+var startDate1 = '2018-01-01';
+var endDate1   = '2018-12-31';
+
+// Later period
+var startDate2 = '2025-01-01';
+var endDate2   = '2025-12-31';
+
+
+// ============================================================
+// 3. CLOUD MASKING — SENTINEL-2 SR
+// ============================================================
+
+function maskS2Clouds(image) {
+
+  var qa = image.select('QA60');
+
+  var cloudBitMask = 1 << 10;
+  var cirrusBitMask = 1 << 11;
+
+  var mask = qa.bitwiseAnd(cloudBitMask).eq(0)
+      .and(qa.bitwiseAnd(cirrusBitMask).eq(0));
+
+  return image
+      .updateMask(mask)
+      .divide(10000)
+      .copyProperties(image, ['system:time_start']);
+}
+
+
+// ============================================================
+// 4. CREATE EARLIER IMAGE COMPOSITE
+// ============================================================
+
+var collection1 = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
+  .filterBounds(studyArea)
+  .filterDate(startDate1, endDate1)
+  .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 20))
+  .map(maskS2Clouds);
+
+print('Earlier image collection:', collection1);
+
+var image1 = collection1
+  .median()
+  .clip(studyArea);
+
+print('Earlier composite:', image1);
+
+
+// ============================================================
+// 5. CREATE LATER IMAGE COMPOSITE
+// ============================================================
+
+var collection2 = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
+  .filterBounds(studyArea)
+  .filterDate(startDate2, endDate2)
+  .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 20))
+  .map(maskS2Clouds);
+
+print('Later image collection:', collection2);
+
+var image2 = collection2
+  .median()
+  .clip(studyArea);
+
+print('Later composite:', image2);
+
+
+// ============================================================
+// 6. VISUALIZE EARLIER AND LATER IMAGES
+// ============================================================
+
+var rgbVis = {
+  bands: ['B4', 'B3', 'B2'],
+  min: 0,
+  max: 0.3
+};
+
+Map.addLayer(image1, rgbVis, 'Earlier RGB');
+Map.addLayer(image2, rgbVis, 'Later RGB');
+
+
+// ============================================================
+// 7. CALCULATE NDVI
+// ============================================================
+
+function addNDVI(image) {
+
+  var ndvi = image.normalizedDifference(['B8', 'B4'])
+    .rename('NDVI');
+
+  return image.addBands(ndvi);
+}
+
+var image1WithNDVI = addNDVI(image1);
+var image2WithNDVI = addNDVI(image2);
+
+
+// ============================================================
+// 8. CALCULATE NDVI CHANGE
+// ============================================================
+
+var ndvi1 = image1WithNDVI.select('NDVI');
+var ndvi2 = image2WithNDVI.select('NDVI');
+
+var ndviChange = ndvi2
+  .subtract(ndvi1)
+  .rename('NDVI_Change');
+
+print('NDVI Change:', ndviChange);
+
+
+// ============================================================
+// 9. VISUALIZE NDVI CHANGE
+// ============================================================
+
+var changeVis = {
+  min: -0.5,
+  max: 0.5
+};
+
+Map.addLayer(
+  ndviChange,
+  changeVis,
+  'NDVI Change'
+);
+
+
+// ============================================================
+// 10. CHANGE CLASSIFICATION
+// ============================================================
+
+// Example thresholds ONLY.
+// Adjust them according to the problem and data.
+
+var loss = ndviChange.lt(-0.2);
+
+var noChange = ndviChange
+  .gte(-0.2)
+  .and(ndviChange.lte(0.2));
+
+var gain = ndviChange.gt(0.2);
+
+
+// Create change classes:
+// 1 = Loss
+// 2 = No Change
+// 3 = Gain
+
+var changeClass = ee.Image(0)
+  .where(loss, 1)
+  .where(noChange, 2)
+  .where(gain, 3)
+  .rename('Change_Class')
+  .clip(studyArea);
+
+print('Change Classification:', changeClass);
+
+
+// ============================================================
+// 11. VISUALIZE CHANGE CLASSES
+// ============================================================
+
+var classVis = {
+  min: 1,
+  max: 3,
+  palette: [
+    'red',    // 1 = Loss
+    'gray',   // 2 = No Change
+    'green'   // 3 = Gain
+  ]
+};
+
+Map.addLayer(
+  changeClass,
+  classVis,
+  'Change Classes'
+);
+
+
+// ============================================================
+// 12. AREA CALCULATION
+// ============================================================
+
+// Pixel area in square meters
+var pixelArea = ee.Image.pixelArea();
+
+
+// ---- LOSS AREA ----
+
+var lossArea = pixelArea
+  .updateMask(loss)
+  .reduceRegion({
+    reducer: ee.Reducer.sum(),
+    geometry: studyArea,
+    scale: 10,
+    maxPixels: 1e13
+  });
+
+print(
+  'Loss area (m²):',
+  lossArea
+);
+
+print(
+  'Loss area (hectares):',
+  ee.Number(lossArea.get('area'))
+    .divide(10000)
+);
+
+
+// ---- GAIN AREA ----
+
+var gainArea = pixelArea
+  .updateMask(gain)
+  .reduceRegion({
+    reducer: ee.Reducer.sum(),
+    geometry: studyArea,
+    scale: 10,
+    maxPixels: 1e13
+  });
+
+print(
+  'Gain area (m²):',
+  gainArea
+);
+
+print(
+  'Gain area (hectares):',
+  ee.Number(gainArea.get('area'))
+    .divide(10000)
+);
+
+
+// ============================================================
+// 13. EXPORT CHANGE MAP
+// ============================================================
+
+Export.image.toDrive({
+  image: changeClass,
+  description: 'Change_Detection_Map',
+  folder: 'MAPATHON',
+  fileNamePrefix: 'Change_Detection',
+  region: studyArea,
+  scale: 10,
+  maxPixels: 1e13
+});
+
+
+// ============================================================
+// 14. EXPORT CONTINUOUS CHANGE
+// ============================================================
+
+Export.image.toDrive({
+  image: ndviChange,
+  description: 'NDVI_Change',
+  folder: 'MAPATHON',
+  fileNamePrefix: 'NDVI_Change',
+  region: studyArea,
+  scale: 10,
+  maxPixels: 1e13
+});
+
+
+// ============================================================
+// END
+// ============================================================

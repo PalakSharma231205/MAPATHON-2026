@@ -1,0 +1,468 @@
+// ============================================================
+// MASTER RISK / SUITABILITY TEMPLATE
+// ============================================================
+//
+// EXAMPLE USED IN THIS TEMPLATE:
+// FLOOD RISK MAPPING
+//
+// This is ONLY an example.
+// In the actual Mapathon, the problem may be:
+//   - Flood risk
+//   - Drought risk
+//   - Landslide susceptibility
+//   - Groundwater potential
+//   - Agricultural suitability
+//   - Hospital/site suitability
+//   - Urban suitability
+//   - Disaster vulnerability
+//
+// GENERAL WORKFLOW:
+//
+// DATA
+//   ↓
+// DERIVE FACTORS
+//   ↓
+// RECLASSIFY / STANDARDIZE
+//   ↓
+// ASSIGN WEIGHTS
+//   ↓
+// WEIGHTED OVERLAY
+//   ↓
+// RISK / SUITABILITY MAP
+//   ↓
+// AREA STATISTICS
+//   ↓
+// EXPORT
+//
+// ============================================================
+
+
+// ============================================================
+// 1. STUDY AREA
+// ============================================================
+
+// EXAMPLE:
+// Replace this geometry with the actual Mapathon study area.
+//
+// >>> MODIFY THIS SECTION <<<
+
+var studyArea = ee.Geometry.Rectangle([
+  78.00, 12.80,
+  78.30, 13.10
+]);
+
+Map.centerObject(studyArea, 10);
+
+
+// ============================================================
+// 2. DATE
+// ============================================================
+
+// EXAMPLE:
+// Sentinel-2 imagery for calculating NDVI.
+//
+// >>> MODIFY THIS SECTION <<<
+// Change the dates according to the problem statement.
+
+var startDate = '2025-01-01';
+var endDate   = '2025-12-31';
+
+
+// ============================================================
+// 3. SENTINEL-2 CLOUD MASK
+// ============================================================
+
+// This function masks clouds using QA60.
+
+function maskS2(image) {
+
+  var qa = image.select('QA60');
+
+  var cloudBitMask  = 1 << 10;
+  var cirrusBitMask = 1 << 11;
+
+  var mask = qa.bitwiseAnd(cloudBitMask).eq(0)
+    .and(qa.bitwiseAnd(cirrusBitMask).eq(0));
+
+  return image
+    .updateMask(mask)
+    .divide(10000)
+    .copyProperties(image, ['system:time_start']);
+}
+
+
+// ============================================================
+// 4. SENTINEL-2 COMPOSITE
+// ============================================================
+
+var s2 = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
+  .filterBounds(studyArea)
+  .filterDate(startDate, endDate)
+  .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 20))
+  .map(maskS2);
+
+var composite = s2.median().clip(studyArea);
+
+
+// ============================================================
+// 5. NDVI
+// ============================================================
+
+// EXAMPLE FACTOR:
+// Vegetation condition.
+//
+// >>> MODIFY THIS SECTION IF NEEDED <<<
+//
+// For different problems you may use:
+// NDVI  → vegetation
+// NDWI  → water
+// NDBI  → built-up
+// NBR   → burned area
+
+var ndvi = composite
+  .normalizedDifference(['B8', 'B4'])
+  .rename('NDVI');
+
+
+// ============================================================
+// 6. DEM / ELEVATION
+// ============================================================
+
+// EXAMPLE:
+// SRTM DEM.
+//
+// For flood risk:
+// lower elevation generally represents greater flood
+// susceptibility in many settings.
+//
+// >>> MODIFY DATASET IF REQUIRED <<<
+
+var dem = ee.Image('USGS/SRTMGL1_003')
+  .clip(studyArea)
+  .rename('Elevation');
+
+
+// ============================================================
+// 7. SLOPE
+// ============================================================
+
+var slope = ee.Terrain.slope(dem)
+  .rename('Slope');
+
+
+// ============================================================
+// 8. WATER DISTANCE
+// ============================================================
+
+// EXAMPLE:
+// JRC Global Surface Water occurrence.
+//
+// We create a permanent/recurring water mask and calculate
+// distance from water.
+//
+// >>> MODIFY WATER DATASET / THRESHOLD IF REQUIRED <<<
+
+var waterOccurrence = ee.Image(
+  'JRC/GSW1_4/GlobalSurfaceWater'
+).select('occurrence');
+
+var waterMask = waterOccurrence
+  .gt(50)
+  .selfMask();
+
+var distanceToWater = waterMask
+  .distance({
+    kernel: ee.Kernel.euclidean(5000, 'meters')
+  })
+  .rename('Distance_Water');
+
+
+// ============================================================
+// 9. NORMALIZATION / RECLASSIFICATION
+// ============================================================
+//
+// Each factor is converted to a common 0–1 scale.
+//
+// 0 = lower risk
+// 1 = higher risk
+//
+// IMPORTANT:
+// These thresholds are EXAMPLES.
+//
+// >>> MODIFY THESE THRESHOLDS FOR THE ACTUAL PROBLEM <<<
+//
+// Do NOT blindly use these values in the competition.
+// They depend on the problem, study area and scientific basis.
+// ============================================================
+
+
+// ---------- ELEVATION RISK ----------
+
+var elevationRisk = dem
+  .unitScale(0, 100)
+  .clamp(0, 1)
+  .multiply(-1)
+  .add(1)
+  .rename('Elevation_Risk');
+
+
+// ---------- SLOPE RISK ----------
+//
+// Example assumption:
+// relatively low slope → greater flood susceptibility.
+
+var slopeRisk = slope
+  .unitScale(0, 15)
+  .clamp(0, 1)
+  .multiply(-1)
+  .add(1)
+  .rename('Slope_Risk');
+
+
+// ---------- DISTANCE FROM WATER RISK ----------
+//
+// Near water → higher flood risk.
+//
+// >>> MODIFY MAX DISTANCE IF REQUIRED <<<
+
+var waterRisk = distanceToWater
+  .unitScale(0, 5000)
+  .clamp(0, 1)
+  .multiply(-1)
+  .add(1)
+  .rename('Water_Risk');
+
+
+// ============================================================
+// 10. WEIGHTS
+// ============================================================
+//
+// EXAMPLE WEIGHTS:
+//
+// Elevation       = 35%
+// Slope           = 20%
+// Distance water  = 30%
+// NDVI            = 15%
+//
+// >>> MODIFY THESE WEIGHTS <<<
+//
+// IMPORTANT:
+// Ideally justify the weights using:
+// literature, domain knowledge, expert judgement,
+// historical data, or a scientifically defensible method.
+//
+// The total should equal 1.0.
+// ============================================================
+
+var elevationWeight = 0.35;
+var slopeWeight     = 0.20;
+var waterWeight     = 0.30;
+var ndviWeight      = 0.15;
+
+
+// ============================================================
+// 11. NDVI RISK
+// ============================================================
+//
+// EXAMPLE:
+// Lower vegetation → higher flood vulnerability.
+//
+// This is a simplified example.
+//
+// >>> MODIFY / REMOVE THIS FACTOR IF NOT RELEVANT <<<
+
+var ndviRisk = ndvi
+  .unitScale(0, 1)
+  .clamp(0, 1)
+  .multiply(-1)
+  .add(1)
+  .rename('NDVI_Risk');
+
+
+// ============================================================
+// 12. WEIGHTED OVERLAY
+// ============================================================
+
+var riskScore =
+    elevationRisk.multiply(elevationWeight)
+    .add(slopeRisk.multiply(slopeWeight))
+    .add(waterRisk.multiply(waterWeight))
+    .add(ndviRisk.multiply(ndviWeight))
+    .rename('Risk_Score');
+
+
+// ============================================================
+// 13. RISK CLASSIFICATION
+// ============================================================
+//
+// Example classes:
+//
+// 1 = Low
+// 2 = Moderate
+// 3 = High
+// 4 = Very High
+//
+// >>> MODIFY THRESHOLDS IF REQUIRED <<<
+
+var riskClass = ee.Image(0)
+  .where(riskScore.lt(0.25), 1)
+  .where(
+    riskScore.gte(0.25).and(riskScore.lt(0.50)),
+    2
+  )
+  .where(
+    riskScore.gte(0.50).and(riskScore.lt(0.75)),
+    3
+  )
+  .where(riskScore.gte(0.75), 4)
+  .rename('Risk_Class')
+  .clip(studyArea);
+
+
+// ============================================================
+// 14. VISUALIZATION
+// ============================================================
+
+Map.addLayer(
+  riskScore,
+  {
+    min: 0,
+    max: 1
+  },
+  'Continuous Risk Score'
+);
+
+Map.addLayer(
+  riskClass,
+  {
+    min: 1,
+    max: 4,
+    palette: [
+      '00FF00',
+      'FFFF00',
+      'FFA500',
+      'FF0000'
+    ]
+  },
+  'Risk Classes'
+);
+
+
+// ============================================================
+// 15. AREA STATISTICS
+// ============================================================
+//
+// Calculate area of each risk class.
+//
+// This is useful for the final Results section.
+//
+// ============================================================
+
+var pixelArea = ee.Image.pixelArea();
+
+var areaImage = pixelArea.addBands(riskClass);
+
+var areaStats = areaImage.reduceRegion({
+
+  reducer: ee.Reducer.sum()
+    .group({
+      groupField: 1,
+      groupName: 'Risk_Class'
+    }),
+
+  geometry: studyArea,
+
+  scale: 30,
+
+  maxPixels: 1e13
+});
+
+print('Risk Class Area Statistics (m²)', areaStats);
+
+
+// ============================================================
+// 16. EXPORT CONTINUOUS RISK SCORE
+// ============================================================
+
+Export.image.toDrive({
+
+  image: riskScore,
+
+  description: 'Mapathon_Risk_Score',
+
+  folder: 'MAPATHON',
+
+  fileNamePrefix: 'Risk_Score',
+
+  region: studyArea,
+
+  scale: 30,
+
+  maxPixels: 1e13
+});
+
+
+// ============================================================
+// 17. EXPORT CLASSIFIED RISK MAP
+// ============================================================
+
+Export.image.toDrive({
+
+  image: riskClass,
+
+  description: 'Mapathon_Risk_Class',
+
+  folder: 'MAPATHON',
+
+  fileNamePrefix: 'Risk_Class',
+
+  region: studyArea,
+
+  scale: 30,
+
+  maxPixels: 1e13
+});
+
+
+// ============================================================
+// HOW TO MODIFY THIS TEMPLATE
+// ============================================================
+//
+// IF PROBLEM = FLOOD RISK:
+//   Keep elevation, slope, water distance etc.
+//
+// IF PROBLEM = LANDSLIDE:
+//   Use:
+//   - elevation
+//   - slope
+//   - rainfall
+//   - geology
+//   - land cover
+//   - distance from roads/faults if relevant
+//
+// IF PROBLEM = GROUNDWATER:
+//   Consider:
+//   - elevation
+//   - slope
+//   - drainage
+//   - rainfall
+//   - geology
+//   - land cover
+//
+// IF PROBLEM = SITE SUITABILITY:
+//   Factors might be:
+//   - distance from roads
+//   - distance from settlements
+//   - slope
+//   - land use
+//   - restricted areas
+//
+// MAIN THINGS TO CHANGE:
+//   1. studyArea
+//   2. dates
+//   3. input factors
+//   4. normalization thresholds
+//   5. weights
+//   6. risk/suitability class thresholds
+//
+// ============================================================

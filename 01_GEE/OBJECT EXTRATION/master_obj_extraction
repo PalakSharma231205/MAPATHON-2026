@@ -1,0 +1,453 @@
+// ============================================================
+// MASTER FEATURE / OBJECT EXTRACTION TEMPLATE
+// ============================================================
+//
+// EXAMPLE USED IN THIS TEMPLATE:
+// WATER-BODY EXTRACTION
+//
+// METHOD:
+// Sentinel-2
+//    ↓
+// MNDWI
+//    ↓
+// Threshold
+//    ↓
+// Water Mask
+//    ↓
+// Clean / refine
+//    ↓
+// Area calculation
+//    ↓
+// Export
+//
+// IMPORTANT:
+// This is an EXAMPLE.
+// The actual Mapathon problem may ask for:
+//
+//   - Water extraction
+//   - Built-up extraction
+//   - Vegetation extraction
+//   - Burned area extraction
+//   - Agricultural area extraction
+//   - Other geographic features
+//
+// ============================================================
+
+
+// ============================================================
+// 1. STUDY AREA
+// ============================================================
+//
+// >>> MODIFY THIS <<<
+//
+// Replace with actual study area.
+
+var studyArea = ee.Geometry.Rectangle([
+  78.00, 12.80,
+  78.30, 13.10
+]);
+
+Map.centerObject(
+  studyArea,
+  10
+);
+
+
+// ============================================================
+// 2. DATE RANGE
+// ============================================================
+//
+// >>> MODIFY THIS <<<
+//
+// Choose dates relevant to the problem.
+
+var startDate = '2025-01-01';
+
+var endDate = '2025-12-31';
+
+
+// ============================================================
+// 3. CLOUD MASK
+// ============================================================
+
+function maskS2(image) {
+
+  var qa = image.select('QA60');
+
+  var cloudBitMask = 1 << 10;
+
+  var cirrusBitMask = 1 << 11;
+
+  var mask = qa
+    .bitwiseAnd(cloudBitMask)
+    .eq(0)
+    .and(
+      qa
+        .bitwiseAnd(cirrusBitMask)
+        .eq(0)
+    );
+
+  return image
+    .updateMask(mask)
+    .divide(10000)
+    .copyProperties(
+      image,
+      ['system:time_start']
+    );
+}
+
+
+// ============================================================
+// 4. LOAD SENTINEL-2
+// ============================================================
+
+var s2 = ee.ImageCollection(
+  'COPERNICUS/S2_SR_HARMONIZED'
+)
+.filterBounds(studyArea)
+.filterDate(
+  startDate,
+  endDate
+)
+.filter(
+  ee.Filter.lt(
+    'CLOUDY_PIXEL_PERCENTAGE',
+    20
+  )
+)
+.map(maskS2);
+
+
+// ============================================================
+// 5. CREATE COMPOSITE
+// ============================================================
+
+var composite = s2
+  .median()
+  .clip(studyArea);
+
+
+// ============================================================
+// 6. MNDWI
+// ============================================================
+//
+// EXAMPLE:
+// MNDWI = (Green - SWIR) / (Green + SWIR)
+//
+// Sentinel-2:
+// Green = B3
+// SWIR  = B11
+//
+// >>> IF THE PROBLEM CHANGES, THIS IS ONE OF THE
+//     MAIN SECTIONS TO MODIFY <<<
+//
+// ============================================================
+
+var mndwi = composite
+  .normalizedDifference([
+    'B3',
+    'B11'
+  ])
+  .rename('MNDWI');
+
+
+// ============================================================
+// 7. VISUALIZE MNDWI
+// ============================================================
+
+Map.addLayer(
+
+  mndwi,
+
+  {
+    min: -1,
+    max: 1
+  },
+
+  'MNDWI'
+
+);
+
+
+// ============================================================
+// 8. CREATE WATER MASK
+// ============================================================
+//
+// EXAMPLE THRESHOLD:
+//
+// MNDWI > 0
+//     → Water
+//
+// MNDWI <= 0
+//     → Non-water
+//
+// >>> THIS THRESHOLD MUST BE CHECKED / MODIFIED <<<
+//
+// The best threshold depends on:
+//   - location
+//   - season
+//   - imagery
+//   - water type
+//   - surrounding land cover
+//
+// ============================================================
+
+var waterMask = mndwi
+  .gt(0)
+  .rename('Water');
+
+
+// ============================================================
+// 9. OPTIONAL: REMOVE VERY SMALL PATCHES
+// ============================================================
+//
+// This helps remove isolated noisy pixels.
+//
+// >>> MODIFY / REMOVE IF NECESSARY <<<
+
+var connectedPixels =
+  waterMask.connectedPixelCount(
+    100,
+    true
+  );
+
+var cleanedWater = waterMask
+  .updateMask(
+    connectedPixels.gte(8)
+  )
+  .rename('Water_Cleaned');
+
+
+// ============================================================
+// 10. VISUALIZE WATER EXTRACTION
+// ============================================================
+
+Map.addLayer(
+
+  cleanedWater,
+
+  {
+    min: 0,
+    max: 1
+  },
+
+  'Extracted Water'
+
+);
+
+
+// ============================================================
+// 11. CALCULATE WATER AREA
+// ============================================================
+//
+// pixelArea gives area in square metres.
+//
+// ============================================================
+
+var waterAreaImage =
+  ee.Image.pixelArea()
+    .updateMask(cleanedWater);
+
+
+var waterArea =
+  waterAreaImage.reduceRegion({
+
+    reducer:
+      ee.Reducer.sum(),
+
+    geometry:
+      studyArea,
+
+    scale:
+      10,
+
+    maxPixels:
+      1e13
+
+  });
+
+
+print(
+  'Water Area (m²)',
+  waterArea
+);
+
+
+// ============================================================
+// 12. WATER AREA IN km²
+// ============================================================
+
+var waterAreaKm2 =
+  ee.Number(
+    waterArea.get('area')
+  )
+  .divide(1000000);
+
+print(
+  'Water Area (km²)',
+  waterAreaKm2
+);
+
+
+// ============================================================
+// 13. EXPORT MNDWI
+// ============================================================
+
+Export.image.toDrive({
+
+  image:
+    mndwi,
+
+  description:
+    'Mapathon_MNDWI',
+
+  folder:
+    'MAPATHON',
+
+  fileNamePrefix:
+    'MNDWI',
+
+  region:
+    studyArea,
+
+  scale:
+    10,
+
+  maxPixels:
+    1e13
+
+});
+
+
+// ============================================================
+// 14. EXPORT FEATURE MASK
+// ============================================================
+
+Export.image.toDrive({
+
+  image:
+    cleanedWater,
+
+  description:
+    'Mapathon_Water_Extraction',
+
+  folder:
+    'MAPATHON',
+
+  fileNamePrefix:
+    'Water_Extraction',
+
+  region:
+    studyArea,
+
+  scale:
+    10,
+
+  maxPixels:
+    1e13
+
+});
+
+
+// ============================================================
+// HOW TO MODIFY THIS TEMPLATE FOR OTHER FEATURES
+// ============================================================
+//
+// ------------------------------------------------------------
+// IF PROBLEM = WATER EXTRACTION
+// ------------------------------------------------------------
+//
+// Use:
+// MNDWI / NDWI
+//
+// Example:
+// MNDWI = (Green - SWIR) / (Green + SWIR)
+//
+// Current example:
+// B3 and B11
+//
+// ------------------------------------------------------------
+//
+// IF PROBLEM = VEGETATION EXTRACTION
+// ------------------------------------------------------------
+//
+// Use NDVI:
+//
+// NDVI = (NIR - RED) / (NIR + RED)
+//
+// Sentinel-2:
+// NIR = B8
+// RED = B4
+//
+// Example:
+// var ndvi = composite
+//   .normalizedDifference(['B8','B4']);
+//
+// Then apply a suitable threshold.
+//
+// ------------------------------------------------------------
+//
+// IF PROBLEM = BUILT-UP EXTRACTION
+// ------------------------------------------------------------
+//
+// Use NDBI:
+//
+// NDBI = (SWIR - NIR) / (SWIR + NIR)
+//
+// Sentinel-2:
+// SWIR = B11
+// NIR  = B8
+//
+// Then apply a suitable threshold.
+//
+// ------------------------------------------------------------
+//
+// IF PROBLEM = BURNED AREA
+// ------------------------------------------------------------
+//
+// Use NBR:
+//
+// NBR = (NIR - SWIR2) / (NIR + SWIR2)
+//
+// Sentinel-2:
+// NIR   = B8
+// SWIR2 = B12
+//
+// Compare / threshold according to the problem.
+//
+// ------------------------------------------------------------
+//
+// IF PROBLEM = AGRICULTURAL AREA
+// ------------------------------------------------------------
+//
+// Possible approach:
+// NDVI + temporal information + land-cover information.
+//
+// A simple single-date threshold may not be sufficient.
+//
+// ============================================================
+
+
+// ============================================================
+// MAIN SECTIONS TO MODIFY DURING THE MAPATHON
+// ============================================================
+//
+// 1. studyArea
+//
+// 2. startDate / endDate
+//
+// 3. satellite dataset if required
+//
+// 4. spectral index
+//
+// 5. bands used in the index
+//
+// 6. threshold
+//
+// 7. cleaning parameters
+//
+// 8. validation/reference data
+//
+// 9. export name
+//
+// ============================================================

@@ -1,0 +1,518 @@
+// ============================================================
+// MASTER REGRESSION TEMPLATE
+// ============================================================
+//
+// EXAMPLE USED IN THIS TEMPLATE:
+// LAND SURFACE TEMPERATURE (LST) PREDICTION
+//
+// OUTPUT:
+// Continuous temperature value
+//
+// THIS IS DIFFERENT FROM CLASSIFICATION:
+//
+// Classification:
+//   Water / Vegetation / Built-up
+//
+// Regression:
+//   25.3°C / 31.7°C / 38.2°C etc.
+//
+// GENERAL WORKFLOW:
+//
+// INPUT FEATURES
+//      ↓
+// TRAINING TARGET
+//      ↓
+// TRAIN REGRESSION MODEL
+//      ↓
+// PREDICT CONTINUOUS VALUE
+//      ↓
+// VALIDATE
+//      ↓
+// EXPORT
+//
+// ============================================================
+
+
+// ============================================================
+// 1. STUDY AREA
+// ============================================================
+//
+// >>> MODIFY THIS <<<
+//
+// Replace with actual Mapathon study area.
+
+var studyArea = ee.Geometry.Rectangle([
+  78.00, 12.80,
+  78.30, 13.10
+]);
+
+Map.centerObject(studyArea, 10);
+
+
+// ============================================================
+// 2. DATE
+// ============================================================
+//
+// EXAMPLE:
+// One period during which Landsat and Sentinel-2 data
+// are available.
+//
+// >>> MODIFY THIS <<<
+
+var startDate = '2025-01-01';
+var endDate   = '2025-12-31';
+
+
+// ============================================================
+// 3. SENTINEL-2 PREPROCESSING
+// ============================================================
+
+function maskS2(image) {
+
+  var qa = image.select('QA60');
+
+  var cloudBitMask  = 1 << 10;
+  var cirrusBitMask = 1 << 11;
+
+  var mask = qa.bitwiseAnd(cloudBitMask).eq(0)
+    .and(qa.bitwiseAnd(cirrusBitMask).eq(0));
+
+  return image
+    .updateMask(mask)
+    .divide(10000)
+    .copyProperties(image, ['system:time_start']);
+}
+
+
+var s2 = ee.ImageCollection(
+  'COPERNICUS/S2_SR_HARMONIZED'
+)
+.filterBounds(studyArea)
+.filterDate(startDate, endDate)
+.filter(
+  ee.Filter.lt(
+    'CLOUDY_PIXEL_PERCENTAGE',
+    20
+  )
+)
+.map(maskS2);
+
+var s2Composite = s2
+  .median()
+  .clip(studyArea);
+
+
+// ============================================================
+// 4. FEATURE 1 — NDVI
+// ============================================================
+//
+// EXAMPLE FEATURE:
+// Vegetation condition.
+//
+// >>> MODIFY / REPLACE IF REQUIRED <<<
+
+var ndvi = s2Composite
+  .normalizedDifference(['B8', 'B4'])
+  .rename('NDVI');
+
+
+// ============================================================
+// 5. FEATURE 2 — NDBI
+// ============================================================
+//
+// EXAMPLE FEATURE:
+// Built-up condition.
+//
+// >>> MODIFY / REMOVE IF NOT RELEVANT <<<
+
+var ndbi = s2Composite
+  .normalizedDifference(['B11', 'B8'])
+  .rename('NDBI');
+
+
+// ============================================================
+// 6. FEATURE 3 — ELEVATION
+// ============================================================
+
+var elevation = ee.Image(
+  'USGS/SRTMGL1_003'
+)
+.clip(studyArea)
+.rename('Elevation');
+
+
+// ============================================================
+// 7. CREATE FEATURE STACK
+// ============================================================
+
+var featureStack = ee.Image.cat([
+
+  ndvi,
+
+  ndbi,
+
+  elevation
+
+]).clip(studyArea);
+
+
+// ============================================================
+// 8. LOAD LANDSAT
+// ============================================================
+//
+// EXAMPLE TARGET:
+// Landsat 8 Surface Temperature.
+//
+// ST_B10 is converted using the scale and offset provided
+// for Landsat Collection 2 Level-2 data.
+//
+// >>> MODIFY DATASET / TARGET FOR ACTUAL PROBLEM <<<
+//
+// Other possible regression targets could be:
+//   - biomass
+//   - soil property
+//   - pollution
+//   - crop yield
+//   - rainfall
+//   - temperature
+//
+// ============================================================
+
+var landsat = ee.ImageCollection(
+  'LANDSAT/LC08/C02/T1_L2'
+)
+.filterBounds(studyArea)
+.filterDate(startDate, endDate)
+.filter(
+  ee.Filter.lt(
+    'CLOUD_COVER',
+    20
+  )
+);
+
+
+// ============================================================
+// 9. CREATE TARGET IMAGE
+// ============================================================
+//
+// Landsat ST_B10:
+//
+// Temperature Kelvin = DN × 0.00341802 + 149.0
+//
+// Convert Kelvin → Celsius.
+//
+// ============================================================
+
+var lst = landsat
+  .median()
+  .select('ST_B10')
+  .multiply(0.00341802)
+  .add(149.0)
+  .subtract(273.15)
+  .rename('LST')
+  .clip(studyArea);
+
+
+// ============================================================
+// 10. COMBINE FEATURES + TARGET
+// ============================================================
+
+var trainingImage = featureStack
+  .addBands(lst);
+
+
+// ============================================================
+// 11. TRAINING SAMPLES
+// ============================================================
+//
+// Random points are used here ONLY as an EXAMPLE.
+//
+// IMPORTANT:
+//
+// For a serious competition solution, use appropriate
+// representative/reference observations.
+//
+// >>> MODIFY THIS SECTION <<<
+//
+// If the problem provides:
+//   - field measurements
+//   - sample points
+//   - survey data
+//   - reference observations
+//
+// use those instead.
+//
+// ============================================================
+
+var trainingPoints = ee.FeatureCollection.randomPoints({
+
+  region: studyArea,
+
+  points: 500,
+
+  seed: 42
+
+});
+
+
+// ============================================================
+// 12. SAMPLE THE IMAGE
+// ============================================================
+
+var samples = trainingImage.sampleRegions({
+
+  collection: trainingPoints,
+
+  properties: [],
+
+  scale: 30,
+
+  geometries: true
+
+});
+
+
+// Remove samples containing missing values.
+
+samples = samples.filter(
+  ee.Filter.notNull([
+    'NDVI',
+    'NDBI',
+    'Elevation',
+    'LST'
+  ])
+);
+
+
+// ============================================================
+// 13. TRAIN / VALIDATION SPLIT
+// ============================================================
+
+var samplesWithRandom = samples.randomColumn(
+  'random',
+  42
+);
+
+var trainingSamples = samplesWithRandom
+  .filter(
+    ee.Filter.lt('random', 0.7)
+  );
+
+var validationSamples = samplesWithRandom
+  .filter(
+    ee.Filter.gte('random', 0.7)
+  );
+
+
+// ============================================================
+// 14. RANDOM FOREST REGRESSION
+// ============================================================
+//
+// IMPORTANT:
+//
+// This is NOT classification.
+//
+// The classifier is converted into regression mode using:
+//
+// setOutputMode('REGRESSION')
+//
+// ============================================================
+
+var regressionModel =
+  ee.Classifier.smileRandomForest({
+
+    numberOfTrees: 100,
+
+    seed: 42
+
+  })
+  .setOutputMode('REGRESSION')
+  .train({
+
+    features: trainingSamples,
+
+    classProperty: 'LST',
+
+    inputProperties: [
+      'NDVI',
+      'NDBI',
+      'Elevation'
+    ]
+
+  });
+
+
+// ============================================================
+// 15. PREDICT LST
+// ============================================================
+
+var predictedLST = featureStack
+  .classify(regressionModel)
+  .rename('Predicted_LST');
+
+
+// ============================================================
+// 16. VISUALIZE PREDICTION
+// ============================================================
+
+Map.addLayer(
+
+  predictedLST,
+
+  {
+    min: 20,
+    max: 45
+  },
+
+  'Predicted LST'
+
+);
+
+
+// ============================================================
+// 17. VALIDATION
+// ============================================================
+//
+// Compare:
+//
+// Observed LST
+//      vs
+// Predicted LST
+//
+// Metrics commonly used for regression:
+//   RMSE
+//   MAE
+//   R²
+//
+// ============================================================
+
+var validationPredictions =
+  validationSamples.classify(
+    regressionModel,
+    'Predicted'
+  );
+
+
+// Calculate errors.
+
+var errors = validationPredictions.map(
+  function(feature) {
+
+    var observed = ee.Number(
+      feature.get('LST')
+    );
+
+    var predicted = ee.Number(
+      feature.get('Predicted')
+    );
+
+    var error = predicted.subtract(
+      observed
+    );
+
+    return feature.set({
+
+      Error: error,
+
+      AbsoluteError: error.abs(),
+
+      SquaredError: error.pow(2)
+
+    });
+
+  }
+);
+
+
+// ============================================================
+// 18. MAE
+// ============================================================
+
+var mae = errors
+  .aggregate_mean('AbsoluteError');
+
+print(
+  'MAE (°C)',
+  mae
+);
+
+
+// ============================================================
+// 19. RMSE
+// ============================================================
+
+var mse = errors
+  .aggregate_mean('SquaredError');
+
+var rmse = ee.Number(mse).sqrt();
+
+print(
+  'RMSE (°C)',
+  rmse
+);
+
+
+// ============================================================
+// 20. EXPORT
+// ============================================================
+
+Export.image.toDrive({
+
+  image: predictedLST,
+
+  description:
+    'Mapathon_Regression_Prediction',
+
+  folder:
+    'MAPATHON',
+
+  fileNamePrefix:
+    'Regression_Prediction',
+
+  region:
+    studyArea,
+
+  scale:
+    30,
+
+  maxPixels:
+    1e13
+
+});
+
+
+// ============================================================
+// HOW TO MODIFY THIS TEMPLATE
+// ============================================================
+//
+// EXAMPLE CURRENTLY:
+//   Target = LST
+//
+// IF PROBLEM = BIOMASS:
+//   Replace LST target with biomass reference data.
+//
+// IF PROBLEM = SOIL PROPERTY:
+//   Replace LST with soil-property observations.
+//
+// IF PROBLEM = POLLUTION:
+//   Replace LST with pollution measurements.
+//
+// IF PROBLEM = CROP YIELD:
+//   Replace LST with crop-yield observations.
+//
+// MAIN THINGS TO CHANGE:
+//
+//   1. studyArea
+//   2. dates
+//   3. target dataset
+//   4. target property name
+//   5. predictor features
+//   6. training/reference data
+//   7. model parameters
+//   8. validation metrics
+//
+// DO NOT simply change the target name.
+// The training data must actually contain the
+// corresponding measured/reference target.
+//
+// ============================================================
